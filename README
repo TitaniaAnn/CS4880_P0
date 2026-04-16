@@ -1,0 +1,75 @@
+CS 4880 - P0
+Cynthia
+
+------------------------------------------------------------------------
+DESCRIPTION
+------------------------------------------------------------------------
+Reads whitespace-delimited string tokens from a file or stdin, builds a
+binary search tree (BST) ordered by token frequency, and outputs the
+tree in three traversals to separate files.
+
+BST ordering: a token that appears more times is "greater" than one that
+appears fewer times. Tokens with equal frequency share the same node,
+listed in order of first appearance.
+
+------------------------------------------------------------------------
+FILES
+------------------------------------------------------------------------
+P0.c       - main, argument handling, input reading, output orchestration
+tree.c     - buildTree, printPreorder, printInorder, printPostorder, free_tree
+tree.h     - function declarations, StringEntry type
+node.h     - Node struct definition
+Makefile   - build rules
+
+------------------------------------------------------------------------
+BUILD
+------------------------------------------------------------------------
+make
+
+To clean object files and the executable:
+make clean
+
+------------------------------------------------------------------------
+INVOCATION
+------------------------------------------------------------------------
+Read from keyboard (enter tokens, Ctrl+D to signal EOF):
+  P0
+
+Redirect a file through stdin (full filename including extension required):
+  P0 < somefile.fs25s1
+
+Read from a named file (extension .fs25s1 is added automatically):
+  P0 somename
+
+------------------------------------------------------------------------
+INPUT FORMAT
+------------------------------------------------------------------------
+Tokens are strings of letters and digits separated by any whitespace
+(space, tab, newline). Tokens containing other characters produce a
+warning on stderr and are skipped.
+
+------------------------------------------------------------------------
+OUTPUT
+------------------------------------------------------------------------
+Three files are written after the tree is built:
+
+  somename.preorder   - preorder traversal  (root, left, right)
+  somename.inorder    - inorder traversal   (left, root, right)
+  somename.postorder  - postorder traversal (left, right, root)
+
+When no file argument is given, somename is "out".
+
+Each line in the output files:
+  <2*depth spaces><frequency>: <token1> <token2> ...
+
+Example output for input "apple banana apple cherry banana apple":
+  Preorder:
+    3: apple
+      2: banana
+        1: cherry
+
+------------------------------------------------------------------------
+ERROR CONDITIONS
+------------------------------------------------------------------------
+Wrong number of arguments  - prints usage message, exits with code 1
+File cannot be opened      - prints error message, exits with code 1
