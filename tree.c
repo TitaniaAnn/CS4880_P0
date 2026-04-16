@@ -2,11 +2,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "tree.h"
 #include "node.h"
 
-/* ---------- internal helpers ---------- */
+/* ---------- registry (internal to this file) ---------- */
+
+typedef struct {
+    char *token;     /* strdup copy */
+    int   frequency;
+} StringEntry;
+
+static int is_alphanumeric(const char *s)
+{
+    for (; *s; s++)
+        if (!isalnum((unsigned char)*s))
+            return 0;
+    return 1;
+}
+
+/* ---------- node helpers ---------- */
 
 static void node_add_string(Node *n, const char *s)
 {
@@ -33,7 +49,8 @@ static Node *make_node(int frequency, const char *first_string)
     return n;
 }
 
-/* Standard BST search by frequency key. Returns NULL if not found. */
+/* ---------- BST helpers ---------- */
+
 static Node *bst_find(Node *root, int frequency)
 {
     while (root) {
@@ -44,7 +61,6 @@ static Node *bst_find(Node *root, int frequency)
     return NULL;
 }
 
-/* Standard BST insert. The caller guarantees no node with new_node->frequency exists. */
 static Node *bst_insert(Node *root, Node *new_node)
 {
     if (!root)
@@ -55,6 +71,8 @@ static Node *bst_insert(Node *root, Node *new_node)
         root->right = bst_insert(root->right, new_node);
     return root;
 }
+
+/* ---------- print helper ---------- */
 
 static void print_node(Node *n, int depth, FILE *out)
 {
@@ -69,12 +87,43 @@ static void print_node(Node *n, int depth, FILE *out)
 
 /* ---------- public API ---------- */
 
-Node *buildTree(StringEntry *registry, int count)
+Node *buildTree(FILE *in)
 {
-    Node *root = NULL;
-    int i;
+    StringEntry *registry = NULL;
+    int          reg_count = 0, reg_cap = 0;
+    char         buf[1024];
+    Node        *root = NULL;
+    int          i;
 
-    for (i = 0; i < count; i++) {
+    /* Pass 1: read all tokens, accumulate frequencies in registry */
+    while (fscanf(in, "%1023s", buf) == 1) {
+        if (!is_alphanumeric(buf)) {
+            fprintf(stderr, "Warning: skipping non-alphanumeric token '%s'\n", buf);
+            continue;
+        }
+        for (i = 0; i < reg_count; i++) {
+            if (strcmp(registry[i].token, buf) == 0) {
+                registry[i].frequency++;
+                break;
+            }
+        }
+        if (i == reg_count) {
+            if (reg_count == reg_cap) {
+                reg_cap = reg_cap ? reg_cap * 2 : 16;
+                registry = realloc(registry, reg_cap * sizeof(StringEntry));
+                if (!registry) {
+                    fprintf(stderr, "Error: out of memory\n");
+                    exit(1);
+                }
+            }
+            registry[reg_count].token     = strdup(buf);
+            registry[reg_count].frequency = 1;
+            reg_count++;
+        }
+    }
+
+    /* Pass 2: build BST from registry in first-appearance order */
+    for (i = 0; i < reg_count; i++) {
         Node *existing = bst_find(root, registry[i].frequency);
         if (existing) {
             node_add_string(existing, registry[i].token);
@@ -82,7 +131,10 @@ Node *buildTree(StringEntry *registry, int count)
             Node *new_node = make_node(registry[i].frequency, registry[i].token);
             root = bst_insert(root, new_node);
         }
+        free(registry[i].token);
     }
+    free(registry);
+
     return root;
 }
 
