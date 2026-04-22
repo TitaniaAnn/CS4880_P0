@@ -73,3 +73,11 @@ ERROR CONDITIONS
 ------------------------------------------------------------------------
 Wrong number of arguments  - prints usage message, exits with code 1
 File cannot be opened      - prints error message, exits with code 1
+
+------------------------------------------------------------------------
+AI USAGE
+------------------------------------------------------------------------
+Claude Code (claude.ai/code) was used during development of this project
+for assistance with debugging, code structure suggestions, and README
+formatting. All design decisions, logic, and final implementation are
+my own work.
