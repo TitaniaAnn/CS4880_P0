@@ -17,6 +17,7 @@ typedef struct {
 static int is_alphanumeric(const char *s)
 {
     for (; *s; s++)
+        /* Cast to unsigned char: isalnum has UB for negative (signed) char values. */
         if (!isalnum((unsigned char)*s))
             return 0;
     return 1;
@@ -27,6 +28,7 @@ static int is_alphanumeric(const char *s)
 static void node_add_string(Node *n, const char *s)
 {
     if (n->str_count == n->str_cap) {
+        /* Start at 4 slots; double on each reallocation. */
         n->str_cap = n->str_cap ? n->str_cap * 2 : 4;
         n->strings = realloc(n->strings, n->str_cap * sizeof(char *));
         if (!n->strings) {
@@ -61,6 +63,8 @@ static Node *bst_find(Node *root, int frequency)
     return NULL;
 }
 
+/* Frequencies are finalized before the BST is built, so bst_find always
+   handles the equal-frequency case; this function never sees a duplicate key. */
 static Node *bst_insert(Node *root, Node *new_node)
 {
     if (!root)
@@ -107,6 +111,7 @@ Node *buildTree(FILE *in)
                 break;
             }
         }
+        /* If the loop exhausted without a match, i == reg_count: new token. */
         if (i == reg_count) {
             if (reg_count == reg_cap) {
                 reg_cap = reg_cap ? reg_cap * 2 : 16;
