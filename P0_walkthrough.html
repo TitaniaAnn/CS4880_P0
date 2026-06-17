@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CS 4880 P0 — Code Walkthrough</title>
+<style>
+  body { font-family: Georgia, serif; max-width: 900px; margin: 40px auto; padding: 0 24px; color: #1a1a1a; line-height: 1.7; }
+  h1 { font-size: 1.8em; border-bottom: 2px solid #333; padding-bottom: 8px; }
+  h2 { font-size: 1.3em; margin-top: 2.2em; border-bottom: 1px solid #aaa; padding-bottom: 4px; color: #222; }
+  h3 { font-size: 1.05em; margin-top: 1.5em; color: #333; }
+  code, pre { font-family: "Courier New", Courier, monospace; }
+  pre { background: #f4f4f4; border: 1px solid #ddd; border-radius: 4px; padding: 14px 18px; overflow-x: auto; font-size: 0.87em; line-height: 1.5; }
+  code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; font-size: 0.9em; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.93em; }
+  th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: #eee; font-weight: bold; }
+
+  /* Requirement callout box */
+  .req {
+    background: #eef5fb;
+    border-left: 4px solid #2a7ab8;
+    border-radius: 0 4px 4px 0;
+    padding: 8px 14px;
+    margin: 10px 0 14px 0;
+    font-size: 0.88em;
+    color: #1a3a52;
+  }
+  .req strong { color: #1a5c8a; }
+  .req .doc { font-style: italic; }
+
+  /* Extra-credit callout */
+  .ec {
+    background: #f0f9ee;
+    border-left: 4px solid #3a8a3a;
+    border-radius: 0 4px 4px 0;
+    padding: 8px 14px;
+    margin: 10px 0 14px 0;
+    font-size: 0.88em;
+    color: #1a3a1a;
+  }
+  .ec strong { color: #2a6a2a; }
+
+  @media print {
+    body { margin: 20px; font-size: 11pt; }
+    pre { page-break-inside: avoid; }
+    h2, h3 { page-break-after: avoid; }
+    .req, .ec { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<h1>CS 4880 P0 — In-Depth Code Walkthrough with Requirement References</h1>
+<p style="color:#555; font-size:0.9em;">
+  Callouts labeled <strong style="color:#1a5c8a;">REQ</strong> cite the exact spec or suggestion document that drove each implementation decision.
+  Callouts labeled <strong style="color:#2a6a2a;">+10%</strong> mark the extra-credit validation feature.
+</p>
+
+<hr>
+
+<h2>High-Level Goal</h2>
+<p>
+  The program reads whitespace-delimited words, counts how many times each word appears,
+  then organizes them into a <strong>BST keyed by frequency</strong> (not alphabetically).
+  It writes three output files: the BST in preorder, inorder, and postorder traversal.
+</p>
+<div class="req">
+  <strong>REQ — P0 Specification (p.1):</strong> <span class="doc">"Write a program to build a tree for a file input, and then print the tree using three different traversals."</span>
+  The three traversal output files are the primary deliverable, worth <strong>60% of the grade</strong>.
+</div>
+
+<hr>
+
+<h2>File &amp; Folder Structure</h2>
+
+<div class="req">
+  <strong>REQ — Structural Requirements (P0.pdf p.3):</strong> <span class="doc">"The main function should be in the file P0.c … any helpers helping it processing the argument or generate errors in the same file. Then, you should have functions buildTree() printInorder() printPreorder() printPostorder() implemented in the same file tree.c/tree.cpp with tree.h as needed. If you have a type definition for the node, it should be in a separate header file node.h."</span><br>
+  This is why the project is split into exactly three source units: <strong>P0.c</strong> (main + argument helpers), <strong>tree.c / tree.h</strong> (tree functions), and <strong>node.h</strong> (node type). Mixing them would lose architectural standards points (10% of grade).
+</div>
+
+<h2>Data Structures</h2>
+
+<h3>node.h — The BST Node</h3>
+<pre><code>typedef struct Node {
+    int   frequency;   // BST key
+    char **strings;    // dynamic array of words sharing this frequency
+    int   str_count;
+    int   str_cap;
+    Node *left, *right;
+} Node;</code></pre>
+
+<div class="req">
+  <strong>REQ — P0 Specification (p.2):</strong> <span class="doc">"Data repeated the same number of times is interpreted as equivalent data from the ordering perspective (thus falling in the same node)."</span> and <span class="doc">"A node retains each repeated datum just once."</span><br>
+  This is why a single <code>Node</code> holds a <strong>list</strong> of strings rather than a single string — multiple words can share one frequency and therefore one node.
+</div>
+<div class="req">
+  <strong>REQ — Structural Requirements (P0.pdf p.3):</strong> <span class="doc">"If you have a type definition for the node, it should be in a separate header file node.h."</span><br>
+  The struct lives in <strong>node.h</strong>, not inline in tree.c or P0.c.
+</div>
+
+<h3>tree.c (internal) — StringEntry Registry</h3>
+<pre><code>typedef struct {
+    char *token;
+    int   frequency;
+} StringEntry;</code></pre>
+
+<div class="req">
+  <strong>REQ — P0 Suggestions (p.1–2):</strong> <span class="doc">"The tree is built using the frequency of a given string in the file. Because the frequency is unknown when seeing a string, the program should make two passes over the input. The first pass will collect the strings along with frequencies (use a container, a dictionary, etc.). The second pass will read the container and construct the tree without rearranging."</span><br>
+  <code>StringEntry</code> is that intermediate container — it stores each unique token and its final count so that Pass 2 can build the BST with stable, finalized frequencies.
+</div>
+
+<hr>
+
+<h2>main() in P0.c — Three Top-Level Tasks</h2>
+
+<div class="req">
+  <strong>REQ — P0 Suggestions (p.1):</strong> <span class="doc">"Using top-down decomposition you have 3 tasks in main: (1) Process command arguments … (2) Build the tree (3) Traverse the tree three different ways, generating outputs."</span><br>
+  The three sections of <code>main</code> map directly onto these three tasks. The suggestions doc even provides sample pseudocode showing <code>root = buildTree(file)</code> followed by the three print calls.
+</div>
+
+<h3>Task 1 — Argument Handling (P0.c lines 38–54)</h3>
+<pre><code>if (argc > 2)
+    exitError("Usage: P0 [basename]");
+
+if (argc == 1) {
+    in       = stdin;
+    basename = "out";
+} else {
+    snprintf(infile, sizeof(infile), "%s.fs25s1", argv[1]);
+    in = fopen(infile, "r");
+    ...
+    basename = argv[1];
+}</code></pre>
+
+<div class="req">
+  <strong>REQ — Invocation (P0.pdf p.1):</strong> <span class="doc">"P0 [file] where file is an optional argument. If the file argument is not given, the program reads data from the keyboard."</span> and <span class="doc">"Programs not properly implementing invocation can get max 50%."</span><br>
+  The <code>argc &gt; 2</code> guard enforces exactly zero or one argument. The <code>argc == 1</code> branch sets <code>in = stdin</code>, handling both bare keyboard input and shell-redirected input (<code>P0 &lt; somefile.fs25s1</code>) identically — the program cannot and does not distinguish between them.
+</div>
+<div class="req">
+  <strong>REQ — P0 Inputs diagram (P0_inputs.pdf):</strong> The diagram labels these as <em>case1</em> (<code>P0</code>), <em>case2</em> (<code>P0 &lt; file</code>), and <em>case3</em> (<code>P0 somename</code>). Cases 1 and 2 are treated identically via <code>stdin</code>; case 3 opens the named file. <span class="doc">"The program does NOT distinguish between above two cases case1 and case2."</span>
+</div>
+<div class="req">
+  <strong>REQ — Invocation (P0.pdf p.1):</strong> <span class="doc">"the program reads the data file file.fs25s1 (note that file is any valid name and the extension is implicit — it is NOT allowed on the command line)."</span><br>
+  This is why the code appends <code>".fs25s1"</code> itself via <code>snprintf</code> — the user passes <code>P0 somename</code>, never <code>P0 somename.fs25s1</code>.
+</div>
+<div class="req">
+  <strong>REQ — Invocation (P0.pdf p.2):</strong> <span class="doc">"somename is the base name of the input file if given, and it is the constant string out if that argument is not given."</span><br>
+  Exactly matched by <code>basename = "out"</code> in the no-argument branch and <code>basename = argv[1]</code> in the file branch.
+</div>
+
+<h3>exitError helper (P0.c lines 9–13)</h3>
+<pre><code>static void exitError(const char *msg) {
+    fprintf(stderr, "%s\n", msg);
+    exit(1);
+}</code></pre>
+
+<div class="req">
+  <strong>REQ — Requirements (P0.pdf p.2):</strong> <span class="doc">"If the input file is not readable for whatever reason, or command line arguments are not correct, the program must abort with an appropriate message."</span> Worth <strong>10% of the grade</strong>.<br>
+  The helper is <code>static</code> and lives in <strong>P0.c</strong> — satisfying the structural requirement that argument/error helpers stay in the same file as <code>main</code>. The Project Arguments doc shows the same <code>exitError</code> + <code>exit(1)</code> pattern directly.
+</div>
+
+<h3>Task 2 — Build the Tree (P0.c line 57)</h3>
+<pre><code>root = buildTree(in);</code></pre>
+
+<div class="req">
+  <strong>REQ — Structural Requirements (P0.pdf p.3):</strong> <span class="doc">"buildTree() … implemented in the same file tree.c."</span><br>
+  <code>main</code> just passes the file handle and gets back the root — all tree logic is delegated to <code>tree.c</code> as required.
+</div>
+
+<h3>Task 3 — Output Files (P0.c lines 63–73)</h3>
+<pre><code>pre_fp  = open_output(basename, "preorder");
+in_fp   = open_output(basename, "inorder");
+post_fp = open_output(basename, "postorder");
+
+printPreorder (root, 0, pre_fp);
+printInorder  (root, 0, in_fp);
+printPostorder(root, 0, post_fp);</code></pre>
+
+<div class="req">
+  <strong>REQ — Requirements (P0.pdf p.2):</strong> <span class="doc">"The program will subsequently output 3 files corresponding to 3 traversals, named somename.preorder, somename.inorder and somename.postorder."</span><br>
+  The <code>open_output(basename, ext)</code> helper constructs those exact filenames. Output correctness is worth <strong>60% of the grade</strong>.
+</div>
+
+<hr>
+
+<h2>buildTree() in tree.c — The Two-Pass Core</h2>
+
+<div class="req">
+  <strong>REQ — P0 Suggestions (p.1–2):</strong> <span class="doc">"Because the frequency is unknown when seeing a string, the program should make two passes over the input. The first pass will collect the strings along with frequencies. The second pass will read the container and construct the tree without rearranging."</span><br>
+  This is the architectural reason the function exists at all — if frequencies were known upfront, a single-pass insert would work. They aren't, so two passes are mandatory.
+</div>
+
+<h3>Pass 1 — Build the Registry (tree.c lines 103–128)</h3>
+<pre><code>while (fscanf(in, "%1023s", buf) == 1) {
+    if (!is_alphanumeric(buf)) { /* warn and skip */ }
+    // linear search registry for existing token
+    // if found: increment frequency
+    // if not found: grow registry and add new StringEntry
+}</code></pre>
+
+<div class="req">
+  <strong>REQ — Requirements (P0.pdf p.2):</strong> <span class="doc">"Assume the input data is all strings (printable ASCII) separated with standard WS (white space) separators (space, tab, new line)."</span><br>
+  <code>fscanf(in, "%s", ...)</code> is the natural C idiom for this — it skips all whitespace automatically and reads one whitespace-delimited token, matching the spec exactly.
+</div>
+<div class="req">
+  <strong>REQ — Requirements (P0.pdf p.2):</strong> <span class="doc">"Assume you do not know the size of the input file."</span><br>
+  This is why the registry is a <strong>dynamic array</strong> starting at 16 slots and doubling on each reallocation — no fixed upper bound is assumed.
+</div>
+
+<div class="ec">
+  <strong>+10% Extra Credit — Validation (P0.pdf p.2):</strong> <span class="doc">"The data is all strings made up of letters and digits only. You may assume clean data, +10% for validation — a warning message on any bad datum and then skipping that datum."</span><br>
+  <code>is_alphanumeric()</code> checks every character with <code>isalnum()</code>. Non-alphanumeric tokens print a warning to <code>stderr</code> and are skipped entirely — they never enter the registry and never affect the BST. The <code>unsigned char</code> cast avoids undefined behavior on signed char values, which <code>isalnum</code> requires.
+</div>
+
+<h3>Pass 2 — Build the BST (tree.c lines 131–143)</h3>
+<pre><code>for (i = 0; i &lt; reg_count; i++) {
+    Node *existing = bst_find(root, registry[i].frequency);
+    if (existing)
+        node_add_string(existing, registry[i].token);
+    else {
+        Node *new_node = make_node(registry[i].frequency, registry[i].token);
+        root = bst_insert(root, new_node);
+    }
+    free(registry[i].token);
+}
+free(registry);</code></pre>
+
+<div class="req">
+  <strong>REQ — Requirements (P0.pdf p.2):</strong> <span class="doc">"Tree is never balanced nor restructured other than growing new nodes as needed, and the tree is constructed using the first occurrence of each string."</span><br>
+  The registry preserves first-appearance order (tokens are appended in the order they were first seen). Pass 2 iterates the registry in that order, so the BST is built using first-occurrence positions as required. There is no balancing or restructuring — once a node is inserted it never moves.
+</div>
+<div class="req">
+  <strong>REQ — Requirements (P0.pdf p.2):</strong> <span class="doc">"Data repeated the same number of times is interpreted as equivalent data from the ordering perspective (thus falling in the same node)."</span><br>
+  <code>bst_find</code> detects an existing node with the same frequency. When found, the token is appended to that node's string list (<code>node_add_string</code>) rather than creating a new node — exactly the "same node" behavior the spec requires.
+</div>
+
+<hr>
+
+<h2>BST Ordering — Why Higher Frequency = Right</h2>
+
+<pre><code>// bst_insert (tree.c lines 72-75):
+if (new_node->frequency < root->frequency)
+    root->left  = bst_insert(root->left,  new_node);
+else
+    root->right = bst_insert(root->right, new_node);</code></pre>
+
+<div class="req">
+  <strong>REQ — Requirements (P0.pdf p.2):</strong> <span class="doc">"any datum repeated in the file a number of times is larger than another datum that was repeated a smaller number of times."</span><br>
+  "Larger" maps to the right subtree in a standard BST. So higher frequency → right, lower frequency → left. This also means an inorder traversal naturally produces <strong>ascending frequency order</strong>.
+</div>
+
+<hr>
+
+<h2>Node Print Format (tree.c lines 81–90)</h2>
+
+<pre><code>static void print_node(Node *n, int depth, FILE *out) {
+    int i;
+    for (i = 0; i &lt; 2 * depth; i++)
+        fputc(' ', out);
+    fprintf(out, "%d:", n->frequency);
+    for (i = 0; i &lt; n->str_count; i++)
+        fprintf(out, " %s", n->strings[i]);
+    fputc('\n', out);
+}</code></pre>
+
+<div class="req">
+  <strong>REQ — Printing in Traversal (P0.pdf p.3):</strong> <span class="doc">"a node will print starting with indentation of 2x depth (root is at depth 0) then the node's number (the frequency for the node's data) followed by the character ':' and WS followed by the list of strings from the node separated by WS (retaining the original ordering as according to appearance in the input file)."</span><br>
+  Every part of this format is directly mandated: the <code>2 * depth</code> leading spaces, the <code>frequency</code> integer, the literal <code>':'</code>, the space separator, and the strings in first-appearance order. The P0 Suggestions doc also shows a <code>printf("%*c%d:…", level*2, ' ', level, …)</code> sketch confirming the same indent formula.
+</div>
+
+<hr>
+
+<h2>The Three Traversal Functions (tree.c lines 146–168)</h2>
+
+<div class="req">
+  <strong>REQ — Traversals (P0.pdf p.3):</strong> <span class="doc">"Traversals taken from the 3130 textbook: Preorder: process root / process children left to right. Inorder: process left child / process root / process right child. Postorder: process children left to right / process root."</span><br>
+  The three functions implement exactly these definitions. Depth is passed as <code>depth + 1</code> on every recursive call so each child level gets 2 more spaces of indentation — but depth represents structural position in the BST, not visit order, so it is always <code>root_depth + 1</code> for both children regardless of traversal.
+</div>
+
+<table>
+  <tr><th>Function</th><th>Visit Order</th><th>Effect on Output</th></tr>
+  <tr><td><code>printPreorder</code></td><td>Node → Left → Right</td><td>Root printed first; reveals BST shape top-down</td></tr>
+  <tr><td><code>printInorder</code></td><td>Left → Node → Right</td><td>Ascending frequency order (lowest to highest)</td></tr>
+  <tr><td><code>printPostorder</code></td><td>Left → Right → Node</td><td>Root printed last; leaves before parents</td></tr>
+</table>
+
+<hr>
+
+<h2>Structural Requirements Compliance Summary</h2>
+
+<table>
+  <tr><th>Requirement</th><th>Source Doc</th><th>How It's Met</th></tr>
+  <tr><td><code>main</code> in <strong>P0.c</strong></td><td>P0.pdf p.3 Structural</td><td><code>main()</code>, <code>exitError()</code>, <code>open_output()</code> all in P0.c</td></tr>
+  <tr><td>buildTree / print* in <strong>tree.c</strong></td><td>P0.pdf p.3 Structural</td><td>All 5 public functions live in tree.c / tree.h</td></tr>
+  <tr><td>Node type in <strong>node.h</strong></td><td>P0.pdf p.3 Structural</td><td><code>Node</code> struct defined only in node.h</td></tr>
+  <tr><td>3 top-level tasks in main</td><td>Suggestions p.1</td><td>Argument handling → buildTree → 3× print/write</td></tr>
+  <tr><td>Two-pass algorithm</td><td>Suggestions p.1–2</td><td>Pass 1 = registry; Pass 2 = BST construction</td></tr>
+  <tr><td>No restructuring</td><td>P0.pdf p.2</td><td>bst_insert never moves existing nodes</td></tr>
+  <tr><td>First-appearance ordering</td><td>P0.pdf p.2–3</td><td>Registry preserves insertion order; Pass 2 iterates it in order</td></tr>
+  <tr><td>Abort on bad args/file</td><td>P0.pdf p.2</td><td><code>exitError()</code> prints message and calls <code>exit(1)</code></td></tr>
+  <tr><td>Unknown input size</td><td>P0.pdf p.2</td><td>Registry and node string arrays use doubling realloc</td></tr>
+  <tr><td>Alphanumeric validation (+10%)</td><td>P0.pdf p.2</td><td><code>is_alphanumeric()</code> warns to stderr and skips bad tokens</td></tr>
+</table>
+
+<hr>
+
+<h2>Memory Ownership Summary</h2>
+<table>
+  <tr><th>What</th><th>Where Allocated</th><th>Where Freed</th></tr>
+  <tr><td><code>registry[i].token</code></td><td><code>strdup</code> in Pass 1</td><td>End of Pass 2 loop</td></tr>
+  <tr><td><code>registry</code> array</td><td><code>realloc</code> in Pass 1</td><td>After Pass 2 loop</td></tr>
+  <tr><td><code>node-&gt;strings[i]</code></td><td><code>strdup</code> in <code>node_add_string</code></td><td><code>free_tree()</code></td></tr>
+  <tr><td><code>node-&gt;strings</code> array</td><td><code>realloc</code> in <code>node_add_string</code></td><td><code>free_tree()</code></td></tr>
+  <tr><td>Each <code>Node</code></td><td><code>calloc</code> in <code>make_node</code></td><td><code>free_tree()</code></td></tr>
+</table>
+
+<hr>
+
+<h2>End-to-End Example (from P0 Testing doc)</h2>
+<p>
+  The testing doc (<em>P0 Testing</em>) uses this input for <code>P0_test3.fs25s1</code>:
+</p>
+<pre><code>adam 123 adam 35 susan daniel adam 123 35 35 35 35 susan susan adam adam 12 23 x x x x x x x y y y y y y</code></pre>
+
+<p><strong>After Pass 1 — registry in first-appearance order:</strong></p>
+<pre><code>adam   → 5
+123    → 2
+35     → 5
+susan  → 3
+daniel → 1
+12     → 1
+23     → 1
+x      → 7
+y      → 6</code></pre>
+
+<p><strong>After Pass 2 — BST keyed by frequency (higher = right):</strong></p>
+<pre><code>Nodes: 5:adam 35 | 2:123 | 3:susan | 1:daniel 12 23 | 7:x | 6:y
+
+              5: adam 35
+             /           \
+          2: 123          7: x
+         /      \        /
+      1: daniel   3: susan  6: y
+         12 23</code></pre>
+
+<div class="req">
+  <strong>REQ — Testing doc (P0 Testing_ 2026SP):</strong> The testing doc instructs students to draw the expected tree by hand before running the program and compare output. The inorder traversal of this tree should print nodes in ascending frequency: 1 → 2 → 3 → 5 → 6 → 7, confirming BST correctness.
+</div>
+
+</body>
+</html>
