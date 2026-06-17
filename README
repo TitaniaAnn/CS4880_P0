@@ -17,7 +17,7 @@ FILES
 ------------------------------------------------------------------------
 P0.c       - main, argument handling, input reading, output orchestration
 tree.c     - buildTree, printPreorder, printInorder, printPostorder, free_tree
-tree.h     - function declarations, StringEntry type
+tree.h     - function declarations (buildTree, traversals, free_tree)
 node.h     - Node struct definition
 Makefile   - build rules
 
